@@ -19,11 +19,20 @@ func StartPam(s pam.Style, msg string) (string, error) {
 			return "", nil
 		}
 		return password, nil
+
 	case pam.PromptEchoOn:
 		fmt.Print(msg)
 		var input string
 		fmt.Scanln(&input)
 		return input, nil
+
+	case pam.ErrorMsg:
+		fmt.Fprintln(os.Stderr, msg)
+		return "", nil
+
+	case pam.TextInfo:
+		fmt.Println(msg)
+		return "", nil
 	default:
 		return "", nil
 	}

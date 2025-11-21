@@ -33,7 +33,7 @@ func ReadPasswordWithStars(prompt string, r io.Reader, w io.Writer, fd int, raw 
 		c := buf[0]
 
 		if c == '\n' || c == '\r' {
-			fmt.Fprint(w, "\n")
+			fmt.Fprint(w, "\r\n")
 			break
 		}
 
