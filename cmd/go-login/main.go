@@ -60,6 +60,32 @@ func main() {
 		os.Exit(1)
 	}
 
+	usr, err := user.Lookup(username)
+	if err != nil {
+		fmt.Println("lookup error:", err)
+		utils.PressAnyKey(false)
+		os.Exit(1)
+	}
+
+	groups, err := usr.GroupIds()
+	if err != nil {
+		fmt.Println("GroupIds error:", err)
+		utils.PressAnyKey(false)
+		os.Exit(1)
+	}
+	gids := make([]int, len(groups))
+	for i, g := range groups {
+		gi, _ := strconv.Atoi(g)
+		gids[i] = gi
+	}
+	syscall.Setgroups(gids)
+
+	if err := t.SetCred(pam.EstablishCred); err != nil {
+		fmt.Println("set_cred error:", err)
+		utils.PressAnyKey(false)
+		os.Exit(1)
+	}
+
 	if err := t.OpenSession(pam.Silent); err != nil {
 		fmt.Println("pam_open_session error:", err)
 		utils.PressAnyKey(false)
@@ -73,24 +99,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	usr, err := user.Lookup(username)
-	if err != nil {
-		fmt.Println("lookup error:", err)
-		utils.PressAnyKey(false)
-		os.Exit(1)
-	}
+	os.Chdir(usr.HomeDir)
+
+	initialize.InitEnv(env)
+
 	uid, _ := strconv.Atoi(usr.Uid)
 	gid, _ := strconv.Atoi(usr.Gid)
 	syscall.Setgid(gid)
 	syscall.Setuid(uid)
-
-	os.Chdir(usr.HomeDir)
-
-	initialize.InitEnv(env)
 
 	fmt.Println(welcomeScreen)
 
 	syscall.Exec(os.Getenv("SHELL"), []string{os.Getenv("SHELL")}, os.Environ())
 
 	t.CloseSession(pam.Silent)
+	t.SetCred(pam.DeleteCred)
 }
