@@ -38,6 +38,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	env, err := t.GetEnvList()
+	if err != nil {
+		fmt.Println("getenv error:", err)
+		os.Exit(1)
+	}
+	for name, path := range env {
+		os.Setenv(name, path)
+	}
+
 	usr, err := user.Lookup(username)
 	if err != nil {
 		fmt.Println("lookup error:", err)
@@ -58,5 +67,5 @@ func main() {
 
 	syscall.Exec(shell, []string{shell}, os.Environ())
 
-	fmt.Println("Authenticated successfully")
+	t.CloseSession(pam.Silent)
 }
