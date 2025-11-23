@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -21,6 +22,9 @@ var (
 	welcomeScreen string
 	//go:embed text_templates/start_screen.txt
 	startScreen string
+
+	//go:embed text_templates/wrong_password.txt
+	wrongPasswordGif string
 )
 
 func main() {
@@ -44,13 +48,23 @@ func main() {
 
 	if err = t.Authenticate(pam.Silent); err != nil {
 		if err.Error() == "Authentication failure" {
-			fmt.Println("auth failed:", err)
+			fmt.Println("Wrong password, baka!")
+
+			done := make(chan struct{})
+			go func() {
+				reader := bufio.NewReader(os.Stdin)
+				reader.ReadByte()
+				close(done)
+			}()
+			utils.PaintAsciiGif(wrongPasswordGif, done)
+
 		} else if err.Error() == "User not known to the underlying authentication module" {
 			fmt.Println("auth failed:", err)
+			utils.PressAnyKey(false)
 		} else {
 			fmt.Println("auth failed:", err)
+			utils.PressAnyKey(false)
 		}
-		utils.PressAnyKey(false)
 		os.Exit(1)
 	}
 
@@ -108,7 +122,9 @@ func main() {
 	syscall.Setgid(gid)
 	syscall.Setuid(uid)
 
-	fmt.Println(welcomeScreen)
+	if username == "hypoxie" {
+		fmt.Println(welcomeScreen)
+	}
 
 	syscall.Exec(os.Getenv("SHELL"), []string{os.Getenv("SHELL")}, os.Environ())
 
