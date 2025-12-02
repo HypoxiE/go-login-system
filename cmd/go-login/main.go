@@ -1,20 +1,11 @@
 package main
 
 import (
-	"bufio"
-	"fmt"
-	"os"
-	"os/exec"
-	"os/user"
-	"strconv"
-	"syscall"
-
 	_ "embed"
+	"os"
 
-	core "github.com/HypoxiE/go-login-system/pkg/core"
-	"github.com/HypoxiE/go-login-system/pkg/initialize"
-	"github.com/HypoxiE/go-login-system/pkg/utils"
-	"github.com/msteinert/pam"
+	"github.com/HypoxiE/go-login-system/pkg/stdin"
+	"github.com/HypoxiE/go-login-system/pkg/stdout"
 )
 
 var (
@@ -28,106 +19,140 @@ var (
 )
 
 func main() {
-	fmt.Println(startScreen)
 
-	fmt.Print("Login: ")
-	var username string
-	fmt.Scanln(&username)
-
-	if username == "shutdown" {
-		exec.Command("shutdown", "-h", "now").Run()
-	}
-
-	t, err := pam.StartFunc("login", username, core.StartPam)
-
-	if err != nil {
-		fmt.Println("pam_start error:", err)
-		utils.PressAnyKey(false)
-		os.Exit(1)
-	}
-
-	if err = t.Authenticate(pam.Silent); err != nil {
-		if err.Error() == "Authentication failure" {
-			fmt.Println("Wrong password, baka!")
-
-			done := make(chan struct{})
-			go func() {
-				reader := bufio.NewReader(os.Stdin)
-				reader.ReadByte()
-				close(done)
-			}()
-			utils.PaintAsciiGif(wrongPasswordGif, done)
-
-		} else if err.Error() == "User not known to the underlying authentication module" {
-			fmt.Println("auth failed:", err)
-			utils.PressAnyKey(false)
-		} else {
-			fmt.Println("auth failed:", err)
-			utils.PressAnyKey(false)
+	cin := stdin.InitCIn()
+	cout := stdout.InitCOut()
+	go cin.MainLoop(os.Stdin, os.Stdout, int(os.Stdin.Fd()), true)
+	defer func() {
+		cin.StopOutput <- struct{}{}
+	}()
+	defer func() {
+		if r := recover(); r != nil {
+			cin.StopOutput <- struct{}{}
+			panic(r)
 		}
-		os.Exit(1)
-	}
+	}()
+	defer func() {
+		cout.Fini()
+	}()
+	defer func() {
+		if r := recover(); r != nil {
+			cout.Fini()
+			panic(r)
+		}
+	}()
 
-	if err := t.AcctMgmt(pam.Silent); err != nil {
-		fmt.Println("AcctMgmt error:", err)
-		utils.PressAnyKey(false)
-		os.Exit(1)
-	}
+	cout.TextOut(startScreen)
+	cout.Sync()
 
-	usr, err := user.Lookup(username)
-	if err != nil {
-		fmt.Println("lookup error:", err)
-		utils.PressAnyKey(false)
-		os.Exit(1)
-	}
+	//time.Sleep(5 * time.Second)
+	//cout.TextOut(cin.GetValue())
+	//cout.TextOut("hypoxie")
+	//cout.NewLine()
+	//cout.LineOut("sdjkf")
 
-	groups, err := usr.GroupIds()
-	if err != nil {
-		fmt.Println("GroupIds error:", err)
-		utils.PressAnyKey(false)
-		os.Exit(1)
-	}
-	gids := make([]int, len(groups))
-	for i, g := range groups {
-		gi, _ := strconv.Atoi(g)
-		gids[i] = gi
-	}
-	syscall.Setgroups(gids)
+	//cout.Sync()
 
-	if err := t.SetCred(pam.EstablishCred); err != nil {
-		fmt.Println("set_cred error:", err)
-		utils.PressAnyKey(false)
-		os.Exit(1)
-	}
+	//time.Sleep(5 * time.Second)
 
-	if err := t.OpenSession(pam.Silent); err != nil {
-		fmt.Println("pam_open_session error:", err)
-		utils.PressAnyKey(false)
-		os.Exit(1)
-	}
+	//fmt.Print("Login: ")
+	//var username string
+	//fmt.Scanln(&username)
 
-	env, err := t.GetEnvList()
-	if err != nil {
-		fmt.Println("getenv error:", err)
-		utils.PressAnyKey(false)
-		os.Exit(1)
-	}
+	//if username == "shutdown" {
+	//	exec.Command("shutdown", "-h", "now").Run()
+	//}
 
-	os.Chdir(usr.HomeDir)
+	//t, err := pam.StartFunc("login", username, core.StartPam)
 
-	initialize.InitEnv(env)
+	//if err != nil {
+	//	fmt.Println("pam_start error:", err)
+	//	utils.PressAnyKey(false)
+	//	os.Exit(1)
+	//}
 
-	uid, _ := strconv.Atoi(usr.Uid)
-	gid, _ := strconv.Atoi(usr.Gid)
-	syscall.Setgid(gid)
-	syscall.Setuid(uid)
+	//if err = t.Authenticate(pam.Silent); err != nil {
+	//	if err.Error() == "Authentication failure" {
+	//		fmt.Println("Wrong password, baka!")
 
-	if username == "hypoxie" {
-		fmt.Println(welcomeScreen)
-	}
+	//		done := make(chan struct{})
+	//		go func() {
+	//			reader := bufio.NewReader(os.Stdin)
+	//			reader.ReadByte()
+	//			close(done)
+	//		}()
+	//		utils.PaintAsciiGif(wrongPasswordGif, done)
 
-	syscall.Exec(os.Getenv("SHELL"), []string{os.Getenv("SHELL")}, os.Environ())
+	//	} else if err.Error() == "User not known to the underlying authentication module" {
+	//		fmt.Println("auth failed:", err)
+	//		utils.PressAnyKey(false)
+	//	} else {
+	//		fmt.Println("auth failed:", err)
+	//		utils.PressAnyKey(false)
+	//	}
+	//	os.Exit(1)
+	//}
 
-	t.CloseSession(pam.Silent)
-	t.SetCred(pam.DeleteCred)
+	//if err := t.AcctMgmt(pam.Silent); err != nil {
+	//	fmt.Println("AcctMgmt error:", err)
+	//	utils.PressAnyKey(false)
+	//	os.Exit(1)
+	//}
+
+	//usr, err := user.Lookup(username)
+	//if err != nil {
+	//	fmt.Println("lookup error:", err)
+	//	utils.PressAnyKey(false)
+	//	os.Exit(1)
+	//}
+
+	//groups, err := usr.GroupIds()
+	//if err != nil {
+	//	fmt.Println("GroupIds error:", err)
+	//	utils.PressAnyKey(false)
+	//	os.Exit(1)
+	//}
+	//gids := make([]int, len(groups))
+	//for i, g := range groups {
+	//	gi, _ := strconv.Atoi(g)
+	//	gids[i] = gi
+	//}
+	//syscall.Setgroups(gids)
+
+	//if err := t.SetCred(pam.EstablishCred); err != nil {
+	//	fmt.Println("set_cred error:", err)
+	//	utils.PressAnyKey(false)
+	//	os.Exit(1)
+	//}
+
+	//if err := t.OpenSession(pam.Silent); err != nil {
+	//	fmt.Println("pam_open_session error:", err)
+	//	utils.PressAnyKey(false)
+	//	os.Exit(1)
+	//}
+
+	//env, err := t.GetEnvList()
+	//if err != nil {
+	//	fmt.Println("getenv error:", err)
+	//	utils.PressAnyKey(false)
+	//	os.Exit(1)
+	//}
+
+	//os.Chdir(usr.HomeDir)
+
+	//initialize.InitEnv(env)
+
+	//uid, _ := strconv.Atoi(usr.Uid)
+	//gid, _ := strconv.Atoi(usr.Gid)
+	//syscall.Setgid(gid)
+	//syscall.Setuid(uid)
+
+	//if username == "hypoxie" {
+	//	fmt.Println(welcomeScreen)
+	//}
+
+	//syscall.Exec(os.Getenv("SHELL"), []string{os.Getenv("SHELL")}, os.Environ())
+
+	//t.CloseSession(pam.Silent)
+	//t.SetCred(pam.DeleteCred)
 }
