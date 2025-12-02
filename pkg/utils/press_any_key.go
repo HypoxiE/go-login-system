@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/HypoxiE/go-login-system/pkg/stdin"
+	"github.com/HypoxiE/go-login-system/pkg/stdout"
 	"golang.org/x/term"
 )
 
-func PressAnyKey(prints bool) {
+func OldPressAnyKey(prints bool) {
 	if prints {
 		fmt.Println("Press any key...")
 	}
@@ -20,4 +22,15 @@ func PressAnyKey(prints bool) {
 
 	var b [1]byte
 	os.Stdin.Read(b[:])
+}
+
+func PressAnyKey(cin stdin.ConsoleInput, cout *stdout.ConsoleOutput) {
+	if cout != nil {
+		cout.LineOut("Press any key...")
+		cout.Sync()
+	}
+
+	cin.Flush <- struct{}{}
+	<-cin.LastSymbol
+
 }

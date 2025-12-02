@@ -7,8 +7,9 @@ import (
 )
 
 type ConsoleInput struct {
-	Value []byte
-	Flush chan struct{}
+	Value      []byte
+	LastSymbol chan byte
+	Flush      chan struct{}
 
 	StopOutput chan struct{}
 }
@@ -16,16 +17,20 @@ type ConsoleInput struct {
 func InitCIn() ConsoleInput {
 	stop_sign := make(chan struct{})
 	flush := make(chan struct{})
+	last := make(chan byte, 1)
 
 	return ConsoleInput{
 		Value: []byte{},
 		Flush: flush,
+
+		LastSymbol: last,
 
 		StopOutput: stop_sign,
 	}
 }
 
 func (inp *ConsoleInput) MainLoop(r io.Reader, w io.Writer, fd int, raw bool) error {
+
 	var oldState *term.State
 	var err error
 
@@ -59,6 +64,24 @@ func (inp *ConsoleInput) MainLoop(r io.Reader, w io.Writer, fd int, raw bool) er
 			if !ok {
 				return nil
 			}
+
+			select {
+			case <-inp.LastSymbol:
+			default:
+			}
+			inp.LastSymbol <- c
+
+			if c == 0x03 {
+				panic("KeyInterrupt Error")
+			}
+
+			if c == 0x7f || c == 0x08 {
+				if len(inp.Value) > 0 {
+					inp.Value = inp.Value[:len(inp.Value)-1]
+				}
+				continue
+			}
+
 			if c == '\r' {
 				inp.Value = append(inp.Value, '\n')
 			}
@@ -67,6 +90,10 @@ func (inp *ConsoleInput) MainLoop(r io.Reader, w io.Writer, fd int, raw bool) er
 			return nil
 		case <-inp.Flush:
 			inp.Value = []byte{}
+			select {
+			case <-inp.LastSymbol:
+			default:
+			}
 		}
 	}
 }

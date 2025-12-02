@@ -3,9 +3,11 @@ package main
 import (
 	_ "embed"
 	"os"
+	"os/exec"
 
 	"github.com/HypoxiE/go-login-system/pkg/stdin"
 	"github.com/HypoxiE/go-login-system/pkg/stdout"
+	"github.com/HypoxiE/go-login-system/pkg/utils"
 )
 
 var (
@@ -42,32 +44,51 @@ func main() {
 		}
 	}()
 
-	cout.TextOut(startScreen)
+	go cout.SlowTextOut(startScreen)
+	cout.NewLine()
 	cout.Sync()
 
-	//time.Sleep(5 * time.Second)
-	//cout.TextOut(cin.GetValue())
-	//cout.TextOut("hypoxie")
-	//cout.NewLine()
-	//cout.LineOut("sdjkf")
+	// input username
+	cout.TextOut("Login: ")
+	cout.ShowCursor()
+	cout.Sync()
 
-	//cout.Sync()
+	x := cout.CursorColumn
+	for c := range cin.LastSymbol {
+		if c == '\n' || c == '\r' {
+			break
+		} else if c == 0x7f || c == 0x08 {
+			if cout.CursorColumn > x {
+				cout.CursorColumn--
+				cout.TextOut(" ")
+				cout.CursorColumn--
+				cout.ShowCursor()
+				cout.Sync()
+			}
+			continue
+		}
+		cout.TextOut(string(c))
+		cout.ShowCursor()
+		cout.Sync()
+	}
 
-	//time.Sleep(5 * time.Second)
+	cout.HideCursor()
+	cout.NewLine()
+	cout.Sync()
 
-	//fmt.Print("Login: ")
-	//var username string
-	//fmt.Scanln(&username)
+	username := cin.GetForLine()
 
-	//if username == "shutdown" {
-	//	exec.Command("shutdown", "-h", "now").Run()
-	//}
+	if username == "shutdown" {
+		exec.Command("shutdown", "-h", "now").Run()
+	}
 
-	//t, err := pam.StartFunc("login", username, core.StartPam)
+	utils.PressAnyKey(cin, &cout)
+
+	//_, err := pam.StartFunc("login", username, core.StartPam)
 
 	//if err != nil {
 	//	fmt.Println("pam_start error:", err)
-	//	utils.PressAnyKey(false)
+	//	utils.PressAnyKey(cin, nil)
 	//	os.Exit(1)
 	//}
 

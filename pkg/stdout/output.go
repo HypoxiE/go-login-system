@@ -2,6 +2,8 @@ package stdout
 
 import (
 	"log"
+	"strings"
+	"time"
 
 	"github.com/gdamore/tcell"
 )
@@ -41,6 +43,7 @@ func (cout *ConsoleOutput) LineOut(new_string string) {
 		cout.Screen.SetContent(cout.CursorColumn, cout.CursorLine, r, nil, tcell.StyleDefault)
 		cout.CursorColumn += 1
 	}
+	cout.NewLine()
 }
 
 func (cout *ConsoleOutput) FreeTextOut(x int, y int, new_string string, use_x_in_new_string bool) (x_end int, y_end int) {
@@ -87,8 +90,38 @@ func (cout *ConsoleOutput) TextOut(new_string string) {
 	}
 }
 
+func (cout *ConsoleOutput) SlowTextOut(new_string string) {
+
+	x := cout.CursorColumn
+	y := cout.CursorLine
+
+	cout.CursorLine += strings.Count(new_string, "\n") + 1
+
+	for _, r := range new_string {
+		if r == '\n' {
+			y++
+			x = 0
+			continue
+		} else if r == '\r' {
+			x = 0
+			continue
+		}
+		cout.Screen.SetContent(x, y, r, nil, tcell.StyleDefault)
+		x += 1
+		cout.Sync()
+		time.Sleep(2 * time.Millisecond)
+	}
+}
+
 func (cout *ConsoleOutput) GetCursor() (x int, y int) {
 	return cout.CursorColumn, cout.CursorLine
+}
+
+func (cout *ConsoleOutput) ShowCursor() {
+	cout.Screen.ShowCursor(cout.CursorColumn, cout.CursorLine)
+}
+func (cout *ConsoleOutput) HideCursor() {
+	cout.Screen.HideCursor()
 }
 
 func (cout *ConsoleOutput) Fini() {
