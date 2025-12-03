@@ -2,7 +2,6 @@ package stdout
 
 import (
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -110,23 +109,23 @@ func (cout *ConsoleOutput) TextOut(new_string string) {
 	cout.SetCursorPosition(cout.FreeTextOut(cout.CursorColumn, cout.CursorLine, new_string, false))
 }
 
+func (cout *ConsoleOutput) TextOutLn(new_string string) {
+	cout.TextOut(new_string)
+	cout.NewLine()
+}
+
 func (cout *ConsoleOutput) TextOutSync(new_string string) {
 	cout.CursorColumn, cout.CursorLine = cout.FreeTextOut(cout.CursorColumn, cout.CursorLine, new_string, false)
 	cout.Sync()
 }
 
-func (cout *ConsoleOutput) SlowTextOut(new_string string, autosync bool, sync_cursor chan struct{}) {
-	x, y := cout.CursorColumn, cout.CursorLine
-	cout.SetCursorYPosition(cout.CursorLine + strings.Count(new_string, "\n") + 1)
-
-	sync_cursor <- struct{}{}
-
+func (cout *ConsoleOutput) SlowTextOut(x int, y int, new_string string, autosync bool, millisec_duration int) {
 	for _, r := range new_string {
 		x, y = cout.FreeTextOut(x, y, string(r), false)
 		if autosync {
 			cout.Sync()
 		}
-		time.Sleep(2 * time.Millisecond)
+		time.Sleep(time.Duration(millisec_duration) * time.Millisecond)
 	}
 }
 

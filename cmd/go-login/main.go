@@ -2,12 +2,21 @@ package main
 
 import (
 	_ "embed"
+	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
+	"strconv"
+	"strings"
+	"syscall"
 
+	"github.com/HypoxiE/go-login-system/pkg/core"
+	getstrings "github.com/HypoxiE/go-login-system/pkg/get_strings"
+	"github.com/HypoxiE/go-login-system/pkg/initialize"
 	"github.com/HypoxiE/go-login-system/pkg/stdin"
 	"github.com/HypoxiE/go-login-system/pkg/stdout"
 	"github.com/HypoxiE/go-login-system/pkg/utils"
+	"github.com/msteinert/pam"
 )
 
 var (
@@ -20,8 +29,7 @@ var (
 	wrongPasswordGif string
 )
 
-func main() {
-
+func run() int {
 	cin := stdin.InitCIn()
 	go cin.MainLoop(os.Stdin, os.Stdout, int(os.Stdin.Fd()), true)
 	defer func() {
@@ -37,144 +45,115 @@ func main() {
 			panic(r)
 		}
 	}()
-	AutoSyncOn := make(chan struct{})
-	go cout.SyncLoop(AutoSyncOn, 30)
+	StopSyncLoop := make(chan struct{})
+	go cout.SyncLoop(StopSyncLoop, 30)
 	defer func() {
-		AutoSyncOn <- struct{}{}
+		StopSyncLoop <- struct{}{}
 	}()
-
-	cursor_lock_channel := make(chan struct{})
-	go cout.SlowTextOut(startScreen, false, cursor_lock_channel)
-	cout.NewLine()
-
-	<-cursor_lock_channel
-
-	// input username
-	cout.TextOut("Login: ")
-	cout.ShowCursor()
-	//cout.Sync()
-
-	x := cout.CursorColumn
-	for c := range cin.LastSymbol {
-		if c == '\n' || c == '\r' {
-			break
-		} else if c == 0x7f || c == 0x08 {
-			if cout.CursorColumn > x {
-				cout.CursorColumn--
-				cout.TextOut(" ")
-				cout.CursorColumn--
-				cout.ShowCursor()
-				//cout.Sync()
-			}
-			continue
-		}
-		cout.TextOut(string(c))
-		cout.ShowCursor()
-		//cout.Sync()
+	{
+		x, y := cout.GetCursorPosition()
+		cout.SetCursorYPosition(cout.CursorLine + strings.Count(startScreen, "\n"))
+		go cout.SlowTextOut(x, y, startScreen, false, 1)
+		cout.NewLine()
 	}
 
-	cout.HideCursor()
-	cout.NewLine()
-	//cout.Sync()
-
-	username := cin.GetForLine()
-
+	cout.TextOut("Login: ")
+	cout.ShowCursor()
+	username := getstrings.ReadString(&cout, &cin)
 	if username == "shutdown" {
 		exec.Command("shutdown", "-h", "now").Run()
 	}
 
-	utils.PressAnyKey(cin, &cout)
+	sp := core.InitPI(&cout, &cin)
+	t, err := pam.StartFunc("login", username, sp.StartPam)
+	if err != nil {
+		cout.TextOutLn("pam_start error:" + err.Error())
+		utils.PressAnyKey(cin, nil)
+		return 1
+	}
 
-	//_, err := pam.StartFunc("login", username, core.StartPam)
+	if err = t.Authenticate(pam.Silent); err != nil {
+		if err.Error() == "Authentication failure" {
+			cout.TextOutLn("Wrong password, baka!")
+			utils.PressAnyKey(cin, nil)
+		} else if err.Error() == "User not known to the underlying authentication module" {
+			cout.TextOutLn("auth failed:" + err.Error())
+			utils.PressAnyKey(cin, nil)
+		} else {
+			cout.TextOutLn("auth failed:" + err.Error())
+			utils.PressAnyKey(cin, nil)
+		}
+		return 1
+	}
 
-	//if err != nil {
-	//	fmt.Println("pam_start error:", err)
-	//	utils.PressAnyKey(cin, nil)
-	//	os.Exit(1)
-	//}
+	if err := t.AcctMgmt(pam.Silent); err != nil {
+		cout.TextOutLn("AcctMgmt error: " + err.Error())
+		utils.PressAnyKey(cin, nil)
+		return 1
+	}
 
-	//if err = t.Authenticate(pam.Silent); err != nil {
-	//	if err.Error() == "Authentication failure" {
-	//		fmt.Println("Wrong password, baka!")
+	usr, err := user.Lookup(username)
+	if err != nil {
+		cout.TextOutLn("lookup error: " + err.Error())
+		utils.PressAnyKey(cin, nil)
+		return 1
+	}
 
-	//		done := make(chan struct{})
-	//		go func() {
-	//			reader := bufio.NewReader(os.Stdin)
-	//			reader.ReadByte()
-	//			close(done)
-	//		}()
-	//		utils.PaintAsciiGif(wrongPasswordGif, done)
+	groups, err := usr.GroupIds()
+	if err != nil {
+		cout.TextOutLn("GroupIds error: " + err.Error())
+		utils.PressAnyKey(cin, nil)
+		return 1
+	}
+	gids := make([]int, len(groups))
+	for i, g := range groups {
+		gi, _ := strconv.Atoi(g)
+		gids[i] = gi
+	}
+	syscall.Setgroups(gids)
 
-	//	} else if err.Error() == "User not known to the underlying authentication module" {
-	//		fmt.Println("auth failed:", err)
-	//		utils.PressAnyKey(false)
-	//	} else {
-	//		fmt.Println("auth failed:", err)
-	//		utils.PressAnyKey(false)
-	//	}
-	//	os.Exit(1)
-	//}
+	if err := t.SetCred(pam.EstablishCred); err != nil {
+		cout.TextOutLn("set_cred error: " + err.Error())
+		utils.PressAnyKey(cin, nil)
+		return 1
+	}
 
-	//if err := t.AcctMgmt(pam.Silent); err != nil {
-	//	fmt.Println("AcctMgmt error:", err)
-	//	utils.PressAnyKey(false)
-	//	os.Exit(1)
-	//}
+	if err := t.OpenSession(pam.Silent); err != nil {
+		cout.TextOutLn("pam_open_session error: " + err.Error())
+		utils.PressAnyKey(cin, nil)
+		return 1
+	}
 
-	//usr, err := user.Lookup(username)
-	//if err != nil {
-	//	fmt.Println("lookup error:", err)
-	//	utils.PressAnyKey(false)
-	//	os.Exit(1)
-	//}
+	env, err := t.GetEnvList()
+	if err != nil {
+		cout.TextOutLn("getenv error: " + err.Error())
+		utils.PressAnyKey(cin, nil)
+		return 1
+	}
 
-	//groups, err := usr.GroupIds()
-	//if err != nil {
-	//	fmt.Println("GroupIds error:", err)
-	//	utils.PressAnyKey(false)
-	//	os.Exit(1)
-	//}
-	//gids := make([]int, len(groups))
-	//for i, g := range groups {
-	//	gi, _ := strconv.Atoi(g)
-	//	gids[i] = gi
-	//}
-	//syscall.Setgroups(gids)
+	os.Chdir(usr.HomeDir)
 
-	//if err := t.SetCred(pam.EstablishCred); err != nil {
-	//	fmt.Println("set_cred error:", err)
-	//	utils.PressAnyKey(false)
-	//	os.Exit(1)
-	//}
+	initialize.InitEnv(env)
 
-	//if err := t.OpenSession(pam.Silent); err != nil {
-	//	fmt.Println("pam_open_session error:", err)
-	//	utils.PressAnyKey(false)
-	//	os.Exit(1)
-	//}
+	uid, _ := strconv.Atoi(usr.Uid)
+	gid, _ := strconv.Atoi(usr.Gid)
+	syscall.Setgid(gid)
+	syscall.Setuid(uid)
 
-	//env, err := t.GetEnvList()
-	//if err != nil {
-	//	fmt.Println("getenv error:", err)
-	//	utils.PressAnyKey(false)
-	//	os.Exit(1)
-	//}
+	cin.StopOutput <- struct{}{}
+	StopSyncLoop <- struct{}{}
+	cout.Fini()
 
-	//os.Chdir(usr.HomeDir)
+	fmt.Println(welcomeScreen)
 
-	//initialize.InitEnv(env)
+	syscall.Exec(os.Getenv("SHELL"), []string{os.Getenv("SHELL")}, os.Environ())
+	t.CloseSession(pam.Silent)
+	t.SetCred(pam.DeleteCred)
 
-	//uid, _ := strconv.Atoi(usr.Uid)
-	//gid, _ := strconv.Atoi(usr.Gid)
-	//syscall.Setgid(gid)
-	//syscall.Setuid(uid)
+	return 0
+}
 
-	//if username == "hypoxie" {
-	//	fmt.Println(welcomeScreen)
-	//}
-
-	//syscall.Exec(os.Getenv("SHELL"), []string{os.Getenv("SHELL")}, os.Environ())
-
-	//t.CloseSession(pam.Silent)
-	//t.SetCred(pam.DeleteCred)
+func main() {
+	excode := run()
+	os.Exit(excode)
 }
