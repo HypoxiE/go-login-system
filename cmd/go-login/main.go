@@ -25,30 +25,32 @@ var (
 	//go:embed text_templates/start_screen.txt
 	startScreen string
 
-	//go:embed text_templates/wrong_password.txt
+	//go:embed text_templates/w_p.txt
 	wrongPasswordGif string
 )
 
 func run() int {
+
 	cin := stdin.InitCIn()
 	go cin.MainLoop(os.Stdin, os.Stdout, int(os.Stdin.Fd()), true)
+	defersIsNeed := true
 	defer func() {
-		cin.StopOutput <- struct{}{}
+		if defersIsNeed {
+			cin.StopOutput <- struct{}{}
+		}
 	}()
 	cout := stdout.InitCOut()
 	defer func() {
-		cout.Fini()
-	}()
-	defer func() {
-		if r := recover(); r != nil {
+		if defersIsNeed {
 			cout.Fini()
-			panic(r)
 		}
 	}()
 	StopSyncLoop := make(chan struct{})
-	go cout.SyncLoop(StopSyncLoop, 30)
+	go cout.SyncLoop(StopSyncLoop, 15)
 	defer func() {
-		StopSyncLoop <- struct{}{}
+		if defersIsNeed {
+			StopSyncLoop <- struct{}{}
+		}
 	}()
 	{
 		x, y := cout.GetCursorPosition()
@@ -59,15 +61,15 @@ func run() int {
 
 	cout.TextOut("Login: ")
 	cout.ShowCursor()
-	username := getstrings.ReadString(&cout, &cin)
+	username := getstrings.ReadString(&cout, &cin, nil)
 	if username == "shutdown" {
-		exec.Command("shutdown", "-h", "now").Run()
+		return 1000
 	}
 
 	sp := core.InitPI(&cout, &cin)
 	t, err := pam.StartFunc("login", username, sp.StartPam)
 	if err != nil {
-		cout.TextOutLn("pam_start error:" + err.Error())
+		cout.TextOutLn("pam_start error: " + err.Error())
 		utils.PressAnyKey(cin, nil)
 		return 1
 	}
@@ -75,12 +77,29 @@ func run() int {
 	if err = t.Authenticate(pam.Silent); err != nil {
 		if err.Error() == "Authentication failure" {
 			cout.TextOutLn("Wrong password, baka!")
+			stop_gif_animation := make(chan struct{})
+			//gifDeferIsNeed := true
+			//defer func() {
+			//	if gifDeferIsNeed {
+			//		close(stop_gif_animation)
+			//	}
+			//}()
+			//{
+			//	frames, y_len := outputanimations.GetRawGifInfo(wrongPasswordGif)
+			//	x, y := cout.GetCursorPosition()
+			//	go outputanimations.GrayGifOutput(x, y, &cout, frames, 100, stop_gif_animation)
+			//	cout.SetCursorYPosition(cout.CursorLine + y_len)
+			//	cout.NewLine()
+			//}
 			utils.PressAnyKey(cin, nil)
+			close(stop_gif_animation)
+			//gifDeferIsNeed = false
+
 		} else if err.Error() == "User not known to the underlying authentication module" {
-			cout.TextOutLn("auth failed:" + err.Error())
+			cout.TextOutLn("auth failed: " + err.Error())
 			utils.PressAnyKey(cin, nil)
 		} else {
-			cout.TextOutLn("auth failed:" + err.Error())
+			cout.TextOutLn("auth failed: " + err.Error())
 			utils.PressAnyKey(cin, nil)
 		}
 		return 1
@@ -140,9 +159,10 @@ func run() int {
 	syscall.Setgid(gid)
 	syscall.Setuid(uid)
 
-	cin.StopOutput <- struct{}{}
-	StopSyncLoop <- struct{}{}
+	close(cin.StopOutput)
+	close(StopSyncLoop)
 	cout.Fini()
+	defersIsNeed = false
 
 	fmt.Println(welcomeScreen)
 
@@ -155,5 +175,8 @@ func run() int {
 
 func main() {
 	excode := run()
+	if excode == 1000 {
+		exec.Command("shutdown", "-h", "now").Run()
+	}
 	os.Exit(excode)
 }

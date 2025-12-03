@@ -2,13 +2,14 @@ package stdin
 
 import (
 	"io"
+	"unicode/utf8"
 
 	"golang.org/x/term"
 )
 
 type ConsoleInput struct {
-	Value      []byte
-	LastSymbol chan byte
+	Value      []rune
+	LastSymbol chan rune
 	Flush      chan struct{}
 
 	StopOutput chan struct{}
@@ -17,10 +18,10 @@ type ConsoleInput struct {
 func InitCIn() ConsoleInput {
 	stop_sign := make(chan struct{})
 	flush := make(chan struct{})
-	last := make(chan byte, 1)
+	last := make(chan rune, 1)
 
 	return ConsoleInput{
-		Value: []byte{},
+		Value: []rune{},
 		Flush: flush,
 
 		LastSymbol: last,
@@ -42,19 +43,29 @@ func (inp *ConsoleInput) MainLoop(r io.Reader, w io.Writer, fd int, raw bool) er
 		defer term.Restore(fd, oldState)
 	}
 
-	inputCh := make(chan byte)
+	inputCh := make(chan rune)
 
 	go func() {
 		buf := make([]byte, 1)
+		var utfbuf []byte
 		for {
 			n, err := r.Read(buf)
 			if err != nil {
 				close(inputCh)
 				return
 			}
-			if n > 0 {
-				inputCh <- buf[0]
+			if n == 0 {
+				continue
 			}
+
+			utfbuf = append(utfbuf, buf[0])
+
+			r, size := utf8.DecodeRune(utfbuf)
+			if r == utf8.RuneError && size == 1 {
+				continue
+			}
+			inputCh <- r
+			utfbuf = utfbuf[size:]
 		}
 	}()
 
@@ -71,9 +82,9 @@ func (inp *ConsoleInput) MainLoop(r io.Reader, w io.Writer, fd int, raw bool) er
 			}
 			inp.LastSymbol <- c
 
-			if c == 0x03 {
-				panic("KeyInterrupt Error")
-			}
+			//if c == 0x03 {
+			//	key_interrupt <- struct{}{}
+			//}
 
 			if c == 0x7f || c == 0x08 {
 				if len(inp.Value) > 0 {
@@ -89,7 +100,7 @@ func (inp *ConsoleInput) MainLoop(r io.Reader, w io.Writer, fd int, raw bool) er
 		case <-inp.StopOutput:
 			return nil
 		case <-inp.Flush:
-			inp.Value = []byte{}
+			inp.Value = []rune{}
 			select {
 			case <-inp.LastSymbol:
 			default:

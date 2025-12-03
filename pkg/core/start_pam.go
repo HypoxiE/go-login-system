@@ -30,8 +30,8 @@ func (pam_inp *PamInputs) StartPam(s pam.Style, msg string) (string, error) {
 
 	case pam.PromptEchoOn:
 		cout.TextOut(msg)
-		password := gstr.ReadString(cout, cin)
-		return password, nil
+		str := gstr.ReadString(cout, cin, nil)
+		return str, nil
 
 	//case pam.ErrorMsg:
 	//	fmt.Fprintln(os.Stderr, msg)

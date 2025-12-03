@@ -5,7 +5,7 @@ import (
 	"github.com/HypoxiE/go-login-system/pkg/stdout"
 )
 
-func ReadString(cout *stdout.ConsoleOutput, cin *stdin.ConsoleInput) string {
+func ReadString(cout *stdout.ConsoleOutput, cin *stdin.ConsoleInput, replace_symbol *rune) string {
 
 	x := cout.CursorColumn
 	for c := range cin.LastSymbol {
@@ -20,7 +20,11 @@ func ReadString(cout *stdout.ConsoleOutput, cin *stdin.ConsoleInput) string {
 			}
 			continue
 		}
-		cout.TextOut(string(c))
+		if replace_symbol == nil {
+			cout.TextOut(string(c))
+		} else {
+			cout.TextOut(string(*replace_symbol))
+		}
 		cout.ShowCursor()
 	}
 	str := cin.GetForLine()
