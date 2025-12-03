@@ -23,17 +23,11 @@ var (
 func main() {
 
 	cin := stdin.InitCIn()
-	cout := stdout.InitCOut()
 	go cin.MainLoop(os.Stdin, os.Stdout, int(os.Stdin.Fd()), true)
 	defer func() {
 		cin.StopOutput <- struct{}{}
 	}()
-	defer func() {
-		if r := recover(); r != nil {
-			cin.StopOutput <- struct{}{}
-			panic(r)
-		}
-	}()
+	cout := stdout.InitCOut()
 	defer func() {
 		cout.Fini()
 	}()
@@ -43,15 +37,22 @@ func main() {
 			panic(r)
 		}
 	}()
+	AutoSyncOn := make(chan struct{})
+	go cout.SyncLoop(AutoSyncOn, 30)
+	defer func() {
+		AutoSyncOn <- struct{}{}
+	}()
 
-	go cout.SlowTextOut(startScreen)
+	cursor_lock_channel := make(chan struct{})
+	go cout.SlowTextOut(startScreen, false, cursor_lock_channel)
 	cout.NewLine()
-	cout.Sync()
+
+	<-cursor_lock_channel
 
 	// input username
 	cout.TextOut("Login: ")
 	cout.ShowCursor()
-	cout.Sync()
+	//cout.Sync()
 
 	x := cout.CursorColumn
 	for c := range cin.LastSymbol {
@@ -63,18 +64,18 @@ func main() {
 				cout.TextOut(" ")
 				cout.CursorColumn--
 				cout.ShowCursor()
-				cout.Sync()
+				//cout.Sync()
 			}
 			continue
 		}
 		cout.TextOut(string(c))
 		cout.ShowCursor()
-		cout.Sync()
+		//cout.Sync()
 	}
 
 	cout.HideCursor()
 	cout.NewLine()
-	cout.Sync()
+	//cout.Sync()
 
 	username := cin.GetForLine()
 

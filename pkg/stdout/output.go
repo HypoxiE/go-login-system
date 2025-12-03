@@ -3,6 +3,7 @@ package stdout
 import (
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gdamore/tcell"
@@ -11,8 +12,40 @@ import (
 type ConsoleOutput struct {
 	Screen tcell.Screen
 
+	CursorMutex  sync.Mutex
 	CursorColumn int
 	CursorLine   int
+
+	SyncMutex sync.Mutex
+}
+
+func (cout *ConsoleOutput) SetCursorPosition(x int, y int) {
+	cout.CursorMutex.Lock()
+	defer cout.CursorMutex.Unlock()
+
+	cout.CursorColumn = x
+	cout.CursorLine = y
+}
+
+func (cout *ConsoleOutput) SetCursorXPosition(x int) {
+	cout.CursorMutex.Lock()
+	defer cout.CursorMutex.Unlock()
+
+	cout.CursorColumn = x
+}
+
+func (cout *ConsoleOutput) SetCursorYPosition(y int) {
+	cout.CursorMutex.Lock()
+	defer cout.CursorMutex.Unlock()
+
+	cout.CursorLine = y
+}
+
+func (cout *ConsoleOutput) GetCursorPosition() (x int, y int) {
+	cout.CursorMutex.Lock()
+	defer cout.CursorMutex.Unlock()
+
+	return cout.CursorColumn, cout.CursorLine
 }
 
 func InitCOut() ConsoleOutput {
@@ -34,14 +67,13 @@ func InitCOut() ConsoleOutput {
 }
 
 func (cout *ConsoleOutput) NewLine() {
-	cout.CursorColumn = 0
-	cout.CursorLine += 1
+	cout.SetCursorPosition(0, cout.CursorLine+1)
 }
 
 func (cout *ConsoleOutput) LineOut(new_string string) {
 	for _, r := range new_string {
 		cout.Screen.SetContent(cout.CursorColumn, cout.CursorLine, r, nil, tcell.StyleDefault)
-		cout.CursorColumn += 1
+		cout.SetCursorXPosition(cout.CursorColumn + 1)
 	}
 	cout.NewLine()
 }
@@ -71,50 +103,31 @@ func (cout *ConsoleOutput) FreeTextOut(x int, y int, new_string string, use_x_in
 		cursor_col += 1
 	}
 
-	return cursor_line, cursor_col
+	return cursor_col, cursor_line
 }
 
 func (cout *ConsoleOutput) TextOut(new_string string) {
-
-	for _, r := range new_string {
-		if r == '\n' {
-			cout.CursorLine++
-			cout.CursorColumn = 0
-			continue
-		} else if r == '\r' {
-			cout.CursorColumn = 0
-			continue
-		}
-		cout.Screen.SetContent(cout.CursorColumn, cout.CursorLine, r, nil, tcell.StyleDefault)
-		cout.CursorColumn += 1
-	}
+	cout.SetCursorPosition(cout.FreeTextOut(cout.CursorColumn, cout.CursorLine, new_string, false))
 }
 
-func (cout *ConsoleOutput) SlowTextOut(new_string string) {
+func (cout *ConsoleOutput) TextOutSync(new_string string) {
+	cout.CursorColumn, cout.CursorLine = cout.FreeTextOut(cout.CursorColumn, cout.CursorLine, new_string, false)
+	cout.Sync()
+}
 
-	x := cout.CursorColumn
-	y := cout.CursorLine
+func (cout *ConsoleOutput) SlowTextOut(new_string string, autosync bool, sync_cursor chan struct{}) {
+	x, y := cout.CursorColumn, cout.CursorLine
+	cout.SetCursorYPosition(cout.CursorLine + strings.Count(new_string, "\n") + 1)
 
-	cout.CursorLine += strings.Count(new_string, "\n") + 1
+	sync_cursor <- struct{}{}
 
 	for _, r := range new_string {
-		if r == '\n' {
-			y++
-			x = 0
-			continue
-		} else if r == '\r' {
-			x = 0
-			continue
+		x, y = cout.FreeTextOut(x, y, string(r), false)
+		if autosync {
+			cout.Sync()
 		}
-		cout.Screen.SetContent(x, y, r, nil, tcell.StyleDefault)
-		x += 1
-		cout.Sync()
 		time.Sleep(2 * time.Millisecond)
 	}
-}
-
-func (cout *ConsoleOutput) GetCursor() (x int, y int) {
-	return cout.CursorColumn, cout.CursorLine
 }
 
 func (cout *ConsoleOutput) ShowCursor() {
@@ -129,5 +142,21 @@ func (cout *ConsoleOutput) Fini() {
 }
 
 func (cout *ConsoleOutput) Sync() {
+	cout.SyncMutex.Lock()
+	defer cout.SyncMutex.Unlock()
 	cout.Screen.Show()
+}
+
+func (cout *ConsoleOutput) SyncLoop(stop_signal chan struct{}, fps int) {
+	runFlag := true
+
+	for runFlag {
+		select {
+		case <-stop_signal:
+			runFlag = false
+		default:
+			cout.Sync()
+		}
+		time.Sleep(time.Second / time.Duration(fps))
+	}
 }
