@@ -11,8 +11,9 @@ import (
 	"syscall"
 
 	"github.com/HypoxiE/go-login-system/pkg/core"
-	getstrings "github.com/HypoxiE/go-login-system/pkg/get_strings"
+	gstrings "github.com/HypoxiE/go-login-system/pkg/get_strings"
 	"github.com/HypoxiE/go-login-system/pkg/initialize"
+	outanims "github.com/HypoxiE/go-login-system/pkg/output_animations"
 	"github.com/HypoxiE/go-login-system/pkg/stdin"
 	"github.com/HypoxiE/go-login-system/pkg/stdout"
 	"github.com/HypoxiE/go-login-system/pkg/utils"
@@ -29,7 +30,13 @@ var (
 	wrongPasswordGif string
 )
 
+func resetTTY() {
+	exec.Command("stty", "sane").Run()
+}
+
 func run() int {
+
+	resetTTY()
 
 	cin := stdin.InitCIn()
 	go cin.MainLoop(os.Stdin, os.Stdout, int(os.Stdin.Fd()), true)
@@ -46,7 +53,7 @@ func run() int {
 		}
 	}()
 	StopSyncLoop := make(chan struct{})
-	go cout.SyncLoop(StopSyncLoop, 15)
+	go cout.SyncLoop(StopSyncLoop, 30)
 	defer func() {
 		if defersIsNeed {
 			StopSyncLoop <- struct{}{}
@@ -61,7 +68,7 @@ func run() int {
 
 	cout.TextOut("Login: ")
 	cout.ShowCursor()
-	username := getstrings.ReadString(&cout, &cin, nil)
+	username := gstrings.ReadString(&cout, &cin, nil)
 	if username == "shutdown" {
 		return 1000
 	}
@@ -78,22 +85,22 @@ func run() int {
 		if err.Error() == "Authentication failure" {
 			cout.TextOutLn("Wrong password, baka!")
 			stop_gif_animation := make(chan struct{})
-			//gifDeferIsNeed := true
-			//defer func() {
-			//	if gifDeferIsNeed {
-			//		close(stop_gif_animation)
-			//	}
-			//}()
-			//{
-			//	frames, y_len := outputanimations.GetRawGifInfo(wrongPasswordGif)
-			//	x, y := cout.GetCursorPosition()
-			//	go outputanimations.GrayGifOutput(x, y, &cout, frames, 100, stop_gif_animation)
-			//	cout.SetCursorYPosition(cout.CursorLine + y_len)
-			//	cout.NewLine()
-			//}
+			gifDeferIsNeed := true
+			defer func() {
+				if gifDeferIsNeed {
+					close(stop_gif_animation)
+				}
+			}()
+			{
+				frames, y_len := outanims.GetRawGifInfo(wrongPasswordGif)
+				x, y := cout.GetCursorPosition()
+				go outanims.GrayGifOutput(x, y, &cout, frames, 100, stop_gif_animation)
+				cout.SetCursorYPosition(cout.CursorLine + y_len)
+				cout.NewLine()
+			}
 			utils.PressAnyKey(cin, nil)
 			close(stop_gif_animation)
-			//gifDeferIsNeed = false
+			gifDeferIsNeed = false
 
 		} else if err.Error() == "User not known to the underlying authentication module" {
 			cout.TextOutLn("auth failed: " + err.Error())
