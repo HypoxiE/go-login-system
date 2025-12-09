@@ -10,6 +10,7 @@ import (
 	"os/user"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/HypoxiE/go-login-system/pkg/core"
@@ -54,35 +55,29 @@ func wrongPassword(cout *stdout.ConsoleOutput, cin *stdin.ConsoleInput) {
 func run() int {
 
 	resetTTY()
+	os.Setenv("COLORTERM", "truecolor")
 
-	//f, err := os.OpenFile("gologin.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//log.SetOutput(f)
 	log.SetOutput(io.Discard)
+	f, err := os.OpenFile("/var/log/gologin.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.SetOutput(f)
 
 	cin := stdin.InitCIn()
 	go cin.MainLoop(os.Stdin, os.Stdout, int(os.Stdin.Fd()), true)
-	defersIsNeed := true
-	defer func() {
-		if defersIsNeed {
-			cin.StopOutput <- struct{}{}
-		}
-	}()
 	cout := stdout.InitCOut()
-	defer func() {
-		if defersIsNeed {
-			cout.Fini()
-		}
-	}()
 	StopSyncLoop := make(chan struct{})
 	go cout.SyncLoop(StopSyncLoop, 30)
-	defer func() {
-		if defersIsNeed {
-			StopSyncLoop <- struct{}{}
-		}
-	}()
+
+	var finiOnce sync.Once
+	var inputStopOnce sync.Once
+	var outputSyncStopOnce sync.Once
+
+	defer finiOnce.Do(cout.Fini)
+	defer inputStopOnce.Do(cin.Stop)
+	defer outputSyncStopOnce.Do(func() { StopSyncLoop <- struct{}{} })
+
 	{
 		x, y := cout.GetCursorPosition()
 		cout.SetCursorYPosition(cout.CursorLine + strings.Count(startScreen, "\n"))
@@ -197,12 +192,18 @@ func run() int {
 	syscall.Setgid(gid)
 	syscall.Setuid(uid)
 
-	close(cin.StopOutput)
-	close(StopSyncLoop)
-	cout.Fini()
-	defersIsNeed = false
+	finiOnce.Do(cout.Fini)
+	inputStopOnce.Do(cin.Stop)
+	outputSyncStopOnce.Do(func() { StopSyncLoop <- struct{}{} })
 
 	fmt.Println(welcomeScreen)
+
+	//cmd := exec.Command(os.Getenv("SHELL"))
+	//cmd.Env = os.Environ()
+	//cmd.Stdin = os.Stdin
+	//cmd.Stdout = os.Stdout
+	//cmd.Stderr = os.Stderr
+	//cmd.Run()
 
 	syscall.Exec(os.Getenv("SHELL"), []string{os.Getenv("SHELL")}, os.Environ())
 	t.CloseSession(pam.Silent)
@@ -213,7 +214,6 @@ func run() int {
 
 func main() {
 	excode := run()
-	resetTTY()
 	if excode == 1000 {
 		exec.Command("shutdown", "-h", "now").Run()
 	}

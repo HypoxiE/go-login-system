@@ -12,7 +12,7 @@ type ConsoleInput struct {
 	LastSymbol chan rune
 	Flush      chan struct{}
 
-	StopOutput chan struct{}
+	StopInput chan struct{}
 }
 
 func InitCIn() ConsoleInput {
@@ -26,7 +26,7 @@ func InitCIn() ConsoleInput {
 
 		LastSymbol: last,
 
-		StopOutput: stop_sign,
+		StopInput: stop_sign,
 	}
 }
 
@@ -97,7 +97,7 @@ func (inp *ConsoleInput) MainLoop(r io.Reader, w io.Writer, fd int, raw bool) er
 				inp.Value = append(inp.Value, '\n')
 			}
 			inp.Value = append(inp.Value, c)
-		case <-inp.StopOutput:
+		case <-inp.StopInput:
 			return nil
 		case <-inp.Flush:
 			inp.Value = []rune{}
@@ -130,4 +130,8 @@ func (inp ConsoleInput) GetForLine() string {
 
 func (inp *ConsoleInput) Clean() {
 	inp.Flush <- struct{}{}
+}
+
+func (inp *ConsoleInput) Stop() {
+	inp.StopInput <- struct{}{}
 }

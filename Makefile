@@ -7,7 +7,7 @@ build:
 
 install: build
 	mkdir -p $(INSTALL_DIR)
-	cp $(BINARY_NAME) $(INSTALL_DIR)/$(BINARY_NAME)
+	mv $(BINARY_NAME) $(INSTALL_DIR)/$(BINARY_NAME)
 	@echo "Installed $(BINARY_NAME) to $(INSTALL_DIR)"
 
 test: build
