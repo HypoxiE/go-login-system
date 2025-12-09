@@ -2,6 +2,8 @@ package stdout
 
 import (
 	"log"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +16,8 @@ type ConsoleOutput struct {
 	CursorMutex  sync.Mutex
 	CursorColumn int
 	CursorLine   int
+
+	CurrentStyle tcell.Style
 
 	SyncMutex sync.Mutex
 }
@@ -62,6 +66,8 @@ func InitCOut() ConsoleOutput {
 		Screen:       screen,
 		CursorColumn: 0,
 		CursorLine:   0,
+
+		CurrentStyle: tcell.StyleDefault,
 	}
 }
 
@@ -71,38 +77,188 @@ func (cout *ConsoleOutput) NewLine() {
 
 func (cout *ConsoleOutput) LineOut(new_string string) {
 	for _, r := range new_string {
-		cout.Screen.SetContent(cout.CursorColumn, cout.CursorLine, r, nil, tcell.StyleDefault)
+		cout.Screen.SetContent(cout.CursorColumn, cout.CursorLine, r, nil, cout.CurrentStyle)
 		cout.SetCursorXPosition(cout.CursorColumn + 1)
 	}
 	cout.NewLine()
 }
 
+const ColorAnsiRunes = "0123456789;"
+
 func (cout *ConsoleOutput) FreeTextOut(x int, y int, new_string string, use_x_in_new_string bool) (x_end int, y_end int) {
 	cursor_line := y
 	cursor_col := x
 
-	for _, r := range new_string {
-		if r == '\n' {
+	style := tcell.StyleDefault
+
+	char_i := 0
+
+	rune_array := []rune(new_string)
+
+	for char_i < len(rune_array) {
+		if rune_array[char_i] == '\n' {
 			cursor_line += 1
 			if use_x_in_new_string {
 				cursor_col = x
 			} else {
 				cursor_col = 0
 			}
+			char_i++
 			continue
-		} else if r == '\r' {
+		} else if rune_array[char_i] == '\r' {
 			if use_x_in_new_string {
 				cursor_col = x
 			} else {
 				cursor_col = 0
 			}
+			char_i++
+			continue
+		} else if rune_array[char_i] == '\x1b' && rune_array[char_i+1] == '[' {
+			char_i += 2
+			color_ansi_code := ""
+			for ; char_i < len(rune_array) && rune_array[char_i] != 'm'; char_i++ {
+
+				// Проверка на часть незаконченного блока ansi кода
+				pass_chapter := false
+				for _, r := range ColorAnsiRunes {
+					if r == rune_array[char_i] {
+						pass_chapter = true
+						break
+					}
+				}
+				if !pass_chapter {
+					break
+				}
+
+				color_ansi_code += string(rune_array[char_i])
+			}
+			codes := []int{}
+
+			for attr := range strings.SplitSeq(color_ansi_code, ";") {
+				c, _ := strconv.Atoi(attr)
+				codes = append(codes, c)
+			}
+			cout.ApplyStyle(codes, &style)
+
+			char_i++
 			continue
 		}
-		cout.Screen.SetContent(cursor_col, cursor_line, r, nil, tcell.StyleDefault)
+		cout.Screen.SetContent(cursor_col, cursor_line, rune_array[char_i], nil, style)
 		cursor_col += 1
+		char_i++
 	}
 
 	return cursor_col, cursor_line
+}
+
+var ansiColors [16]tcell.Color = [16]tcell.Color{
+	tcell.NewRGBColor(0, 0, 0),       // 0 Black
+	tcell.NewRGBColor(128, 0, 0),     // 1 Maroon / Dark Red
+	tcell.NewRGBColor(0, 128, 0),     // 2 Green / Dark Green
+	tcell.NewRGBColor(128, 128, 0),   // 3 Olive / Dark Yellow
+	tcell.NewRGBColor(0, 0, 128),     // 4 Navy / Dark Blue
+	tcell.NewRGBColor(128, 0, 128),   // 5 Purple / Dark Magenta
+	tcell.NewRGBColor(0, 128, 128),   // 6 Teal / Dark Cyan
+	tcell.NewRGBColor(192, 192, 192), // 7 Silver / Light Gray
+	tcell.NewRGBColor(128, 128, 128), // 8 Gray / Dark Gray
+	tcell.NewRGBColor(255, 0, 0),     // 9 Red / Bright Red
+	tcell.NewRGBColor(0, 255, 0),     // 10 Lime / Bright Green
+	tcell.NewRGBColor(255, 255, 0),   // 11 Yellow / Bright Yellow
+	tcell.NewRGBColor(0, 0, 255),     // 12 Blue / Bright Blue
+	tcell.NewRGBColor(255, 0, 255),   // 13 Fuchsia / Bright Magenta
+	tcell.NewRGBColor(0, 255, 255),   // 14 Aqua / Bright Cyan
+	tcell.NewRGBColor(255, 255, 255), // 15 White / Bright White
+}
+
+func (cout *ConsoleOutput) ApplyStyle(styleAttrs []int, style *tcell.Style) {
+
+	if style == nil {
+		style = &cout.CurrentStyle
+	}
+
+	for _, c := range styleAttrs {
+		switch c {
+		case 0:
+			*style = tcell.StyleDefault
+		case 1:
+			*style = style.Bold(true)
+		case 4:
+			*style = style.Underline(true)
+
+		// basic fg 30-37
+		case 30:
+			*style = style.Foreground(ansiColors[0]) // black
+		case 31:
+			*style = style.Foreground(ansiColors[1]) // red
+		case 32:
+			*style = style.Foreground(ansiColors[2]) // green
+		case 33:
+			*style = style.Foreground(ansiColors[3]) // yellow
+		case 34:
+			*style = style.Foreground(ansiColors[4]) // blue
+		case 35:
+			*style = style.Foreground(ansiColors[5]) // magenta
+		case 36:
+			*style = style.Foreground(ansiColors[6]) // cyan
+		case 37:
+			*style = style.Foreground(ansiColors[7]) // white
+
+		// basic bg 40-47
+		case 40:
+			*style = style.Background(ansiColors[0])
+		case 41:
+			*style = style.Background(ansiColors[1])
+		case 42:
+			*style = style.Background(ansiColors[2])
+		case 43:
+			*style = style.Background(ansiColors[3])
+		case 44:
+			*style = style.Background(ansiColors[4])
+		case 45:
+			*style = style.Background(ansiColors[5])
+		case 46:
+			*style = style.Background(ansiColors[6])
+		case 47:
+			*style = style.Background(ansiColors[7])
+
+		// bright fg 90-97 -> map to tcell bright colors
+		case 90:
+			*style = style.Foreground(ansiColors[8])
+		case 91:
+			*style = style.Foreground(ansiColors[9])
+		case 92:
+			*style = style.Foreground(ansiColors[10])
+		case 93:
+			*style = style.Foreground(ansiColors[11])
+		case 94:
+			*style = style.Foreground(ansiColors[12])
+		case 95:
+			*style = style.Foreground(ansiColors[13])
+		case 96:
+			*style = style.Foreground(ansiColors[14])
+		case 97:
+			*style = style.Foreground(ansiColors[15])
+
+		// bright bg 100-107
+		case 100:
+			*style = style.Background(ansiColors[8])
+		case 101:
+			*style = style.Background(ansiColors[9])
+		case 102:
+			*style = style.Background(ansiColors[10])
+		case 103:
+			*style = style.Background(ansiColors[11])
+		case 104:
+			*style = style.Background(ansiColors[12])
+		case 105:
+			*style = style.Background(ansiColors[13])
+		case 106:
+			*style = style.Background(ansiColors[14])
+		case 107:
+			*style = style.Background(ansiColors[15])
+
+		}
+	}
 }
 
 func (cout *ConsoleOutput) TextOut(new_string string) {

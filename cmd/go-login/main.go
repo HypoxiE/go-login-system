@@ -3,6 +3,8 @@ package main
 import (
 	_ "embed"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"os/exec"
 	"os/user"
@@ -26,7 +28,7 @@ var (
 	//go:embed text_templates/start_screen.txt
 	startScreen string
 
-	//go:embed text_templates/w_p.txt
+	//go:embed text_templates/wrong_password.txt
 	wrongPasswordGif string
 )
 
@@ -34,9 +36,31 @@ func resetTTY() {
 	exec.Command("stty", "sane").Run()
 }
 
+func wrongPassword(cout *stdout.ConsoleOutput, cin *stdin.ConsoleInput) {
+	cout.TextOutLn("Wrong password, baka!")
+
+	stop := make(chan struct{})
+	frames, ylen := outanims.GetRawGifInfo(wrongPasswordGif)
+	x, y := cout.GetCursorPosition()
+
+	cout.SetCursorYPosition(cout.CursorLine + ylen)
+	cout.NewLine()
+	go outanims.GrayGifOutput(x, y, cout, frames, 100, stop)
+
+	utils.PressAnyKey(*cin, nil)
+	close(stop)
+}
+
 func run() int {
 
 	resetTTY()
+
+	//f, err := os.OpenFile("gologin.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//log.SetOutput(f)
+	log.SetOutput(io.Discard)
 
 	cin := stdin.InitCIn()
 	go cin.MainLoop(os.Stdin, os.Stdout, int(os.Stdin.Fd()), true)
@@ -67,10 +91,35 @@ func run() int {
 	}
 
 	cout.TextOut("Login: ")
-	cout.ShowCursor()
 	username := gstrings.ReadString(&cout, &cin, nil)
-	if username == "shutdown" {
+	switch username {
+	case "shutdown":
 		return 1000
+	case "wrong_password_test":
+		wrongPassword(&cout, &cin)
+		return 0
+	case "colors_test":
+		cout.TextOutLn("\x1b[30m Black foreground\x1b[0m        \x1b[40m Black background")
+		cout.TextOutLn("\x1b[31m DarkRed foreground\x1b[0m       \x1b[41m DarkRed background")
+		cout.TextOutLn("\x1b[32m DarkGreen foreground\x1b[0m     \x1b[42m DarkGreen background")
+		cout.TextOutLn("\x1b[33m DarkYellow foreground\x1b[0m    \x1b[43m DarkYellow background")
+		cout.TextOutLn("\x1b[34m DarkBlue foreground\x1b[0m      \x1b[44m DarkBlue background")
+		cout.TextOutLn("\x1b[35m DarkMagenta foreground\x1b[0m   \x1b[45m DarkMagenta background")
+		cout.TextOutLn("\x1b[36m DarkCyan foreground\x1b[0m      \x1b[46m DarkCyan background")
+		cout.TextOutLn("\x1b[37m Gray/LightGray foreground\x1b[0m \x1b[47m Gray/LightGray background")
+
+		cout.TextOutLn("\x1b[90m LightBlack (Gray) foreground\x1b[0m     \x1b[100m LightBlack background")
+		cout.TextOutLn("\x1b[91m LightRed foreground\x1b[0m             \x1b[101m LightRed background")
+		cout.TextOutLn("\x1b[92m LightGreen foreground\x1b[0m           \x1b[102m LightGreen background")
+		cout.TextOutLn("\x1b[93m LightYellow foreground\x1b[0m          \x1b[103m LightYellow background")
+		cout.TextOutLn("\x1b[94m LightBlue foreground\x1b[0m            \x1b[104m LightBlue background")
+		cout.TextOutLn("\x1b[95m LightMagenta foreground\x1b[0m         \x1b[105m LightMagenta background")
+		cout.TextOutLn("\x1b[96m LightCyan foreground\x1b[0m            \x1b[106m LightCyan background")
+		cout.TextOutLn("\x1b[97m White foreground\x1b[0m                \x1b[107m White background")
+		utils.PressAnyKey(cin, nil)
+		return 0
+	case "exit":
+		return 0
 	}
 
 	sp := core.InitPI(&cout, &cin)
@@ -83,25 +132,7 @@ func run() int {
 
 	if err = t.Authenticate(pam.Silent); err != nil {
 		if err.Error() == "Authentication failure" {
-			cout.TextOutLn("Wrong password, baka!")
-			stop_gif_animation := make(chan struct{})
-			gifDeferIsNeed := true
-			defer func() {
-				if gifDeferIsNeed {
-					close(stop_gif_animation)
-				}
-			}()
-			{
-				frames, y_len := outanims.GetRawGifInfo(wrongPasswordGif)
-				x, y := cout.GetCursorPosition()
-				go outanims.GrayGifOutput(x, y, &cout, frames, 100, stop_gif_animation)
-				cout.SetCursorYPosition(cout.CursorLine + y_len)
-				cout.NewLine()
-			}
-			utils.PressAnyKey(cin, nil)
-			close(stop_gif_animation)
-			gifDeferIsNeed = false
-
+			wrongPassword(&cout, &cin)
 		} else if err.Error() == "User not known to the underlying authentication module" {
 			cout.TextOutLn("auth failed: " + err.Error())
 			utils.PressAnyKey(cin, nil)
@@ -182,6 +213,7 @@ func run() int {
 
 func main() {
 	excode := run()
+	resetTTY()
 	if excode == 1000 {
 		exec.Command("shutdown", "-h", "now").Run()
 	}

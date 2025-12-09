@@ -16,7 +16,6 @@ func ReadString(cout *stdout.ConsoleOutput, cin *stdin.ConsoleInput, replace_sym
 				cout.CursorColumn--
 				cout.TextOut(" ")
 				cout.CursorColumn--
-				cout.ShowCursor()
 			}
 			continue
 		}
@@ -25,12 +24,10 @@ func ReadString(cout *stdout.ConsoleOutput, cin *stdin.ConsoleInput, replace_sym
 		} else {
 			cout.TextOut(string(*replace_symbol))
 		}
-		cout.ShowCursor()
 	}
 	str := cin.GetForLine()
 	cin.Flush <- struct{}{}
 	cout.NewLine()
-	cout.HideCursor()
 
 	return str
 }

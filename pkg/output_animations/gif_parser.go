@@ -25,6 +25,9 @@ func GetRawGifInfo(gif string) ([]string, int) {
 			frames = append(frames, "")
 			i += 3
 			continue
+		} else if gif[i] == 0x1B && gif[i+1] == 0x5B && gif[i+2] == '?' &&
+			gif[i+3] == '2' && gif[i+4] == '5' && gif[i+5] == 'h' {
+			break
 		}
 		frames[active_gif] += string(gif[i])
 		i++
