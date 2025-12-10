@@ -152,22 +152,22 @@ func (cout *ConsoleOutput) FreeTextOut(x int, y int, new_string string, use_x_in
 }
 
 var ansiColors [16]tcell.Color = [16]tcell.Color{
-	tcell.NewRGBColor(0, 0, 0),       // 0 Black
-	tcell.NewRGBColor(128, 0, 0),     // 1 Maroon / Dark Red
-	tcell.NewRGBColor(0, 128, 0),     // 2 Green / Dark Green
-	tcell.NewRGBColor(128, 128, 0),   // 3 Olive / Dark Yellow
-	tcell.NewRGBColor(0, 0, 128),     // 4 Navy / Dark Blue
-	tcell.NewRGBColor(128, 0, 128),   // 5 Purple / Dark Magenta
-	tcell.NewRGBColor(0, 128, 128),   // 6 Teal / Dark Cyan
-	tcell.NewRGBColor(192, 192, 192), // 7 Silver / Light Gray
-	tcell.NewRGBColor(128, 128, 128), // 8 Gray / Dark Gray
-	tcell.NewRGBColor(255, 0, 0),     // 9 Red / Bright Red
-	tcell.NewRGBColor(0, 255, 0),     // 10 Lime / Bright Green
-	tcell.NewRGBColor(255, 255, 0),   // 11 Yellow / Bright Yellow
-	tcell.NewRGBColor(0, 0, 255),     // 12 Blue / Bright Blue
-	tcell.NewRGBColor(255, 0, 255),   // 13 Fuchsia / Bright Magenta
-	tcell.NewRGBColor(0, 255, 255),   // 14 Aqua / Bright Cyan
-	tcell.NewRGBColor(255, 255, 255), // 15 White / Bright White
+	tcell.ColorBlack,   // 0
+	tcell.ColorMaroon,  // 1
+	tcell.ColorGreen,   // 2
+	tcell.ColorOlive,   // 3
+	tcell.ColorNavy,    // 4
+	tcell.ColorPurple,  // 5
+	tcell.ColorTeal,    // 6
+	tcell.ColorSilver,  // 7
+	tcell.ColorGray,    // 8
+	tcell.ColorRed,     // 9
+	tcell.ColorLime,    // 10
+	tcell.ColorYellow,  // 11
+	tcell.ColorBlue,    // 12
+	tcell.ColorFuchsia, // 13
+	tcell.ColorAqua,    // 14
+	tcell.ColorWhite,   // 15
 }
 
 func (cout *ConsoleOutput) ApplyStyle(styleAttrs []int, style *tcell.Style) {

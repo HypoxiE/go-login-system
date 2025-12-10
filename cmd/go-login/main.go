@@ -31,6 +31,9 @@ var (
 
 	//go:embed text_templates/wrong_password.txt
 	wrongPasswordGif string
+
+	//go:embed text_templates/what.txt
+	whatGif string
 )
 
 func resetTTY() {
@@ -47,6 +50,20 @@ func wrongPassword(cout *stdout.ConsoleOutput, cin *stdin.ConsoleInput) {
 	cout.SetCursorYPosition(cout.CursorLine + ylen)
 	cout.NewLine()
 	go outanims.GrayGifOutput(x, y, cout, frames, 100, stop)
+
+	utils.PressAnyKey(*cin, nil)
+	close(stop)
+}
+
+func whatGifScreen(cout *stdout.ConsoleOutput, cin *stdin.ConsoleInput) {
+
+	stop := make(chan struct{})
+	frames, ylen := outanims.GetRawGifInfo(whatGif)
+	x, y := cout.GetCursorPosition()
+
+	cout.SetCursorYPosition(cout.CursorLine + ylen)
+	cout.NewLine()
+	go outanims.GrayGifOutput(x, y, cout, frames, 150, stop)
 
 	utils.PressAnyKey(*cin, nil)
 	close(stop)
@@ -90,8 +107,12 @@ func run() int {
 	switch username {
 	case "shutdown":
 		return 1000
-	case "wrong_password_test":
+	case "wrong password test":
 		wrongPassword(&cout, &cin)
+		return 0
+	case "who i am?":
+		cout.TextOutLn("Who are you?")
+		whatGifScreen(&cout, &cin)
 		return 0
 	case "colors_test":
 		cout.TextOutLn("\x1b[30m Black foreground\x1b[0m        \x1b[40m Black background")
@@ -129,8 +150,8 @@ func run() int {
 		if err.Error() == "Authentication failure" {
 			wrongPassword(&cout, &cin)
 		} else if err.Error() == "User not known to the underlying authentication module" {
-			cout.TextOutLn("auth failed: " + err.Error())
-			utils.PressAnyKey(cin, nil)
+			cout.TextOutLn("Who are you?")
+			whatGifScreen(&cout, &cin)
 		} else {
 			cout.TextOutLn("auth failed: " + err.Error())
 			utils.PressAnyKey(cin, nil)
