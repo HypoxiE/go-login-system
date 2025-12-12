@@ -25,7 +25,10 @@ import (
 
 var (
 	//go:embed text_templates/welcome_screen.txt
-	welcomeScreen string
+	mainUserWelcomeScreen string
+	//go:embed text_templates/welcome_guest_screen.txt
+	guestUserWelcomeScreen string
+
 	//go:embed text_templates/start_screen.txt
 	startScreen string
 
@@ -217,7 +220,11 @@ func run() int {
 	inputStopOnce.Do(cin.Stop)
 	outputSyncStopOnce.Do(func() { StopSyncLoop <- struct{}{} })
 
-	fmt.Println(welcomeScreen)
+	if username == "hypoxie" || username == "root" {
+		fmt.Println(mainUserWelcomeScreen)
+	} else {
+		fmt.Println(guestUserWelcomeScreen)
+	}
 
 	//cmd := exec.Command(os.Getenv("SHELL"))
 	//cmd.Env = os.Environ()
